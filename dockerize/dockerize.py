@@ -39,8 +39,11 @@ class Dockerize(object):
                  runtime=None,
                  buildcmd=None,
                  symlinks=SymlinkOptions.PRESERVE,
-                 build=True):
+                 build=True,
+                 reldir=None,
+                 platform=None):
 
+        self.lib_dirs = None
         self.docker = {}
         self.docker['runtime'] = runtime if runtime else 'docker'
         self.docker['buildcmd'] = buildcmd if buildcmd else 'build'
@@ -57,6 +60,8 @@ class Dockerize(object):
 
         self.targetdir = targetdir
         self.symlinks = symlinks
+        self.reldir = reldir
+        self.docker['platform'] = platform
         self._build_image = build
 
         self.users = []
@@ -98,8 +103,14 @@ class Dockerize(object):
         '''Add a file to the list of files that will be installed into the
         image.'''
 
+        if self.reldir is not None and not src.startswith(self.reldir):
+            src = os.path.join(self.reldir, src)
+
         if dst is None:
-            dst = src
+            if self.reldir is not None and src.startswith(self.reldir):
+                dst = os.path.join(os.sep, os.path.relpath(src, self.reldir))
+            else:
+                dst = src
 
         if not dst.startswith('/'):
             raise ValueError('%s: container paths must be fully '
@@ -140,6 +151,13 @@ class Dockerize(object):
     def generate_dockerfile(self):
         LOG.info('generating Dockerfile')
         tmpl = self.env.get_template('Dockerfile')
+        if self.lib_dirs is not None:
+            self.docker['ld_library_path'] = ":".join(self.lib_dirs)
+
+        with open(os.path.join(self.targetdir, '.dockerignore'), 'w') as dockerignore:
+            print("/Dockerfile", file=dockerignore)
+            print("/.dockerignore", file=dockerignore)
+
         with open(os.path.join(self.targetdir, 'Dockerfile'), 'w') as fde:
             fde.write(tmpl.render(controller=self,
                                   docker=self.docker))
@@ -168,8 +186,14 @@ class Dockerize(object):
         actual copy, since rsync has robust handling of directory trees and
         symlinks.'''
 
+        if self.reldir is not None and not src.startswith(self.reldir):
+            src = os.path.join(self.reldir, src)
+
         if dst is None:
-            dst = src
+            if self.reldir is not None and src.startswith(self.reldir):
+                dst = os.path.join(os.sep, os.path.relpath(src, self.reldir))
+            else:
+                dst = src
 
         if symlinks is None:
             symlinks = self.symlinks
@@ -212,7 +236,17 @@ class Dockerize(object):
 
         # Install some basic nss libraries to permit programs to resolve
         # users, groups, and hosts.
+        lib_dirs = set()
         for libdir in deps.prefixes():
+            if libdir.startswith(self.reldir):
+                libdir = os.path.join(os.sep, os.path.relpath(libdir, self.reldir))
+            lib_dirs.add(libdir)
+        lib_dirs_prio1 = set(lib_dir for lib_dir in lib_dirs if lib_dir.startswith("/lib"))
+        lib_dirs_prio2 = set(lib_dir for lib_dir in lib_dirs if lib_dir.startswith("/usr"))
+        lib_dirs_prio3 = lib_dirs - lib_dirs_prio1 - lib_dirs_prio2
+        self.lib_dirs = list(lib_dirs_prio3) + list(lib_dirs_prio2) + list(lib_dirs_prio1)
+        for libdir in deps.prefixes():
+            print("libdir: ", libdir)
             for nsslib in os.listdir(libdir):
                 if nsslib.startswith('libnss') or nsslib.startswith('libresolv'):
                     src = os.path.join(libdir, nsslib)
@@ -224,11 +258,12 @@ class Dockerize(object):
         into the image.'''
 
         for src, dst in self.paths:
+            print("copy {} {}".format(src, dst))
             for srcitem in glob.iglob(src):
                 self.copy_file(srcitem, dst)
 
     def build_image(self):
-        cmd = [self.docker['runtime'], self.docker['buildcmd']]
+        cmd = [self.docker['runtime']] + shlex.split(self.docker['buildcmd'])
         if 'tag' in self.docker:
             cmd += ['-t', self.docker['tag']]
         cmd += [self.targetdir]

@@ -6,6 +6,7 @@ from __future__ import absolute_import
 import argparse
 import logging
 import sys
+import os
 
 from . import __description__, __program__, __version__
 from .dockerize import Dockerize, SymlinkOptions
@@ -32,12 +33,14 @@ def parse_args():
                        help='Tag to apply to Docker image')
     group.add_argument('--cmd', '-c')
     group.add_argument('--entrypoint', '-e')
+    group.add_argument('--platform', '-p')
 
     group = parser.add_argument_group('Output options')
     group.add_argument('--no-build', '-n',
                        action='store_true',
                        help='Do not build Docker image')
     group.add_argument('--output-dir', '-o')
+    group.add_argument('--rel-dir', '-r')
 
     parser.add_argument('--add-file', '-a',
                         metavar=('SRC', 'DST'),
@@ -105,7 +108,10 @@ def main():
     # and there is not an explicit entrypoint, configure
     # that binary as the entrypoint.
     if len(args.paths) == 1 and not args.entrypoint:
-        args.entrypoint = args.paths[0]
+        if args.rel_dir:
+            args.entrypoint = os.path.join(os.sep, os.path.relpath(args.paths[0], args.rel_dir))
+        else:
+            args.entrypoint = args.paths[0]
 
     app = Dockerize(cmd=args.cmd,
                     runtime=args.runtime,
@@ -114,7 +120,10 @@ def main():
                     tag=args.tag,
                     targetdir=args.output_dir,
                     build=not args.no_build,
-                    symlinks=args.symlinks)
+                    symlinks=args.symlinks,
+                    reldir=args.rel_dir,
+                    platform=args.platform
+                    )
 
     for path in args.paths:
         app.add_file(path)
