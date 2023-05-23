@@ -70,8 +70,9 @@ class DepSolver(object):
 
     '''Finds shared library dependencies of ELF binaries.'''
 
-    def __init__(self):
+    def __init__(self, reldir=None):
         self.deps = set()
+        self.reldir = reldir
 
     def get_deps(self, path):
         LOG.info('getting dependencies for %s', path)
@@ -82,6 +83,10 @@ class DepSolver(object):
         try:
             elf = ELFFile(path)
             interp = elf.interpreter()
+            print(elf, interp, self.reldir)
+            if self.reldir:
+                interp = os.path.join(self.reldir, interp[1:])
+            print(elf, interp, self.reldir)
         except ValueError:
             LOG.debug('%s is not a dynamically linked ELF binary (ignoring)',
                       path)
@@ -91,9 +96,14 @@ class DepSolver(object):
                       path)
             return
 
+        print("interp: ", interp)
         self.deps.add(interp)
+        env = dict(os.environ)
+        if self.reldir:
+            dirs = [os.path.join(self.reldir, d) for d in ["lib/aarch64-linux-gnu", "lib/x86_64-linux-gnu/", "root/lib", "usr/local/lib", "usr/lib"]]
+            env["LD_LIBRARY_PATH"] = ":".join(dirs)
         out = subprocess.check_output([interp, '--list', path],
-                                      encoding='utf-8')
+                                      encoding='utf-8', env=env)
 
         for line in out.splitlines():
             for exp in RE_DEPS:
@@ -102,6 +112,7 @@ class DepSolver(object):
                     continue
 
                 dep = match.group('path')
+                print(dep)
                 LOG.debug('%s requires %s',
                           path,
                           dep)

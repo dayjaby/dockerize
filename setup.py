@@ -20,7 +20,8 @@ setup(
     package_data={'dockerize': ['templates/*']},
     entry_points={
         'console_scripts': [
-            'dockerize = dockerize.main:main'
+            'dockerize = dockerize.main:main',
+            'dockerize-combine = dockerize.combine:main'
         ]
     }
 )

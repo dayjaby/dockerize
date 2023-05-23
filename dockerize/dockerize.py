@@ -223,7 +223,8 @@ class Dockerize(object):
         '''Uses the dockerize.depsolver.DepSolver class to find all the shared
         library dependencies of files installed into the Docker image.'''
 
-        deps = DepSolver()
+        print("DepSolve reldir=", self.reldir)
+        deps = DepSolver(reldir=self.reldir)
 
         # Iterate over all files in the image.
         for root, _, files in os.walk(self.targetdir):
