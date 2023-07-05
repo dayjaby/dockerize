@@ -21,7 +21,8 @@ setup(
     entry_points={
         'console_scripts': [
             'dockerize = dockerize.main:main',
-            'dockerize-combine = dockerize.combine:main'
+            'dockerize-combine = dockerize.combine:main',
+            'untar_safe = dockerize.untar_safe:main',
         ]
     }
 )
