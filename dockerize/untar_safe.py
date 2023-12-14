@@ -3,6 +3,7 @@
 
 import tarfile
 import os
+import pathlib
 import sys
 
 def relative_symlink(src, dst):
@@ -14,6 +15,7 @@ def relative_symlink(src, dst):
 def main():
     target = sys.argv[1]
     cwd = os.getcwd()
+    print(target, cwd)
 
     if not os.path.isdir(target):
         os.mkdir(target)
@@ -26,11 +28,18 @@ def main():
             for m in t:
                 # if "libnss_compat.so" in m.name:
                 #     print(m, type(m), m.linkname, m.name, m.type)
-                if m.issym() and not m.name.startswith(".") and m.linkname.startswith("/"):
-                    filename = os.path.join(os.sep, m.name)
+                if m.issym() and not m.name.startswith("."):
+                    if m.linkname.startswith("/"):
+                        filename = os.path.join(os.sep, m.name)
+                    else:
+                        filename = m.name
                     dirname = os.path.dirname(filename)
-                    relpath = os.path.relpath(m.linkname, start=dirname)
-                    src = os.path.join(target, os.path.relpath(m.linkname, start="/"))
+                    if m.linkname.startswith("/"):
+                        relpath = os.path.relpath(m.linkname, start=dirname)
+                        src = pathlib.Path(os.path.join(target, os.path.relpath(m.linkname, start="/"))).resolve()
+                    else:
+                        relpath = m.linkname
+                        src = os.path.join(target, dirname, relpath)
                     dst = os.path.join(target, m.name)
                     # print("relative_symlink {} {}".format(src, dst))
                     relative_symlink(src, dst)
